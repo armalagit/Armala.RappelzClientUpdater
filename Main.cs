@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Net;
-using System.Threading.Tasks;
 using DataCore;
 using RappelzClientUpdater.Events;
 
@@ -98,7 +97,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Gets the local game client path
         /// </summary>
-        public string ClientPath { get; private set; }
+        public string ClientPath { get; set; }
 
         /// <summary>
         /// Gets the updater operational path
