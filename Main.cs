@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
 using DataCore;
 using RappelzClientUpdater.Events;
 
@@ -52,7 +53,7 @@ namespace RappelzClientUpdater {
         public event EventHandler<DisconnectedArgs> DisconnectedFromServer;
 
         #endregion
-        
+
         #region Event Delegates
 
         /// <summary>
@@ -90,13 +91,13 @@ namespace RappelzClientUpdater {
         /// </summary>
         /// <param name="e"></param>
         protected void OnGameClientVersionUpdate(GameClientVersionArgs e) { GameClientVersionUpdate?.Invoke(this, e); }
-        
+
         /// <summary>
         /// Raises an event that informs the caller of a server connection that has occured
         /// </summary>
         /// <param name="e"></param>
         protected void OnConnected(ConnectedArgs e) { ConnectedToServer?.Invoke(this, e); }
-        
+
         /// <summary>
         /// Raises an event that informs the caller of a server disconnection that has occured
         /// </summary>
@@ -123,6 +124,11 @@ namespace RappelzClientUpdater {
         private NetworkStream Stream { get; set; }
 
         /// <summary>
+        /// Gets or sets the client fingerprint
+        /// </summary>
+        public string Fingerprint { get; set; }
+
+        /// <summary>
         /// Gets the local game client path
         /// </summary>
         public string ClientPath { get; set; }
@@ -139,7 +145,7 @@ namespace RappelzClientUpdater {
 
         /// <summary>
         /// Gets or sets the segmented client update method
-        /// When segmented update has been set the client version will be incrementally updated
+        /// When segmented update has been set the client version will be incrementally updated from version to version
         /// When non-segmented update has been set the client version will be updated from lowest version to highest possible
         /// </summary>
         public bool SegmentedUpdate { get; set; } = true;
@@ -196,8 +202,7 @@ namespace RappelzClientUpdater {
 
                 // Invoke connected event
                 OnConnected(new ConnectedArgs());
-            }
-            catch (Exception ex) {
+            } catch (Exception ex) {
 
                 // Invoke connection error
                 OnStatusUpdate(new StatusUpdateArgs(ex.Message, MessageType.Error));
@@ -209,9 +214,77 @@ namespace RappelzClientUpdater {
             // Set NetworkStream property
             Stream = GetStream();
 
-            byte[] buffer = new byte[NetworkBufferSize];
-            int bytesRead = Stream.Read(buffer, 0, buffer.Length);
-            string message = System.Text.Encoding.ASCII.GetString(buffer);
+            // Loop until loop break or method exit
+            while (true) {
+                
+                // Check if stream exists and is readable
+                if (Stream == null || !Stream.CanRead) {
+
+                    // Close socket
+                    if (Connected) Close();
+
+                    // Invoke disconnected event
+                    OnDisconnected(new DisconnectedArgs());
+
+                    // Exit method
+                    return;
+
+                }
+
+                // Wait for the server's response
+                int responseByte = Stream.ReadByte();
+
+                // Authentication requested
+                if (responseByte == 0x01) {
+
+                    // Invoke connection error
+                    OnAuthenticationRequest(new AuthenticationArgs());
+
+                    // Send password back to the server
+                    byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
+
+                    // Check if stream exists and is writable
+                    if (Stream == null || !Stream.CanWrite) {
+
+                        // Close socket
+                        if (Connected) Close();
+
+                        // Invoke disconnected event
+                        OnDisconnected(new DisconnectedArgs());
+
+                        // Exit method
+                        return;
+
+                    }
+
+                    // Write authentication
+                    Stream.Write(fingerprintBytes, 0, fingerprintBytes.Length);
+
+                // Authentication successful
+                } else if (responseByte == 0x02) {
+
+                    // Invoke connection accepted
+                    OnAuthenticationAccepted(new AuthenticationArgs());
+
+                    // Break loop
+                    break;
+
+                // Authentication failed or unexpected response
+                } else {
+
+                    // Invoke connection denied
+                    OnAuthenticationDenied(new AuthenticationArgs());
+
+                    // Close socket
+                    if (Connected) Close();
+
+                    // Invoke disconnected event
+                    OnDisconnected(new DisconnectedArgs());
+
+                    // Exit method
+                    return;
+                }
+            }
         }
 
         #endregion
