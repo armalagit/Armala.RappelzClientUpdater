@@ -31,7 +31,10 @@ namespace RappelzClientUpdater.Events {
         /// </summary>
         /// <param name="message">Message to be set</param>
         /// <param name="messageType">Message type enum to be set</param>
-        public MessageArgs(string message, MessageType messageType) { Message = message; MessageType = messageType; }
+        public MessageArgs(string message, MessageType messageType) { 
+            Message = message; 
+            MessageType = messageType; 
+        }
     }
 
     /// <summary>
@@ -65,7 +68,34 @@ namespace RappelzClientUpdater.Events {
         /// <param name="hash">MD5 checksum to be set</param>
         /// <param name="totalLength">Total byte length to be set</param>
         /// <param name="receivedLength">Received byte length to be set</param>
-        public TransferProcessArgs(string name, string hash, long totalLength, long receivedLength) { FileName = name; Hash = hash; TotalLength = totalLength; ReceivedLength = receivedLength; }
+        public TransferProcessArgs(string name, string hash, long totalLength, long receivedLength) { 
+            FileName = name; 
+            Hash = hash; 
+            TotalLength = totalLength; 
+            ReceivedLength = receivedLength; 
+        }
+    }
+
+    /// <summary>
+    /// Houses arguments passed to caller during raising of ErrorOccured event
+    /// </summary>
+    public class GameClientVersionArgs : EventArgs {
+        /// <summary>
+        /// integer containing the previous version
+        /// </summary>
+        public int PreviousVersion { get; set; }
+        /// <summary>
+        /// integer containing the new updated version
+        /// </summary>
+        public int NewVersion { get; set; }
+
+        /// <summary>
+        /// Constructor for the AuthenticationArgs, inheriting from Eventargs
+        /// </summary>
+        public GameClientVersionArgs(int previousVersion, int newVersion) {
+            PreviousVersion = previousVersion;
+            NewVersion = newVersion;
+        }
     }
 
 }
