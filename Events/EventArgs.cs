@@ -15,7 +15,7 @@ namespace RappelzClientUpdater.Events {
     /// <summary>
     /// Houses arguments passed to caller during raising of ErrorOccured event
     /// </summary>
-    public class MessageArgs : EventArgs {
+    public class StatusUpdateArgs : EventArgs {
         /// <summary>
         /// string containing the message
         /// </summary>
@@ -26,12 +26,12 @@ namespace RappelzClientUpdater.Events {
         public MessageType MessageType { get; set; }
 
         /// <summary>
-        /// Constructor for the MessageArgs, inheriting from Eventargs
+        /// Constructor for the StatusUpdateArgs, inheriting from Eventargs
         /// Assigns the Message/MessageType properties
         /// </summary>
         /// <param name="message">Message to be set</param>
         /// <param name="messageType">Message type enum to be set</param>
-        public MessageArgs(string message, MessageType messageType) { 
+        public StatusUpdateArgs(string message, MessageType messageType) { 
             Message = message; 
             MessageType = messageType; 
         }
@@ -96,6 +96,26 @@ namespace RappelzClientUpdater.Events {
             PreviousVersion = previousVersion;
             NewVersion = newVersion;
         }
+    }
+
+    /// <summary>
+    /// Houses arguments passed to caller during raising of Connected event
+    /// </summary>
+    public class ConnectedArgs : EventArgs {
+        /// <summary>
+        /// Constructor for the ConnectedArgs, inheriting from Eventargs
+        /// </summary>
+        public ConnectedArgs() { }
+    }
+
+    /// <summary>
+    /// Houses arguments passed to caller during raising of Disconnected event
+    /// </summary>
+    public class DisconnectedArgs : EventArgs {
+        /// <summary>
+        /// Constructor for the DisconnectedArgs, inheriting from Eventargs
+        /// </summary>
+        public DisconnectedArgs() { }
     }
 
 }

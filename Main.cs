@@ -1,12 +1,13 @@
 ﻿using System;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using DataCore;
 using RappelzClientUpdater.Events;
 
 namespace RappelzClientUpdater {
 
-    public class RappelzClientUpdater {
+    public class RappelzClientUpdater : TcpClient {
 
         #region Events
 
@@ -33,12 +34,22 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Occurs when a new message is available to be displayed
         /// </summary>
-        public event EventHandler<MessageArgs> StatusUpdate;
+        public event EventHandler<StatusUpdateArgs> StatusUpdate;
 
         /// <summary>
         /// Occurs when the game client version has been updated
         /// </summary>
         public event EventHandler<GameClientVersionArgs> GameClientVersionUpdate;
+
+        /// <summary>
+        /// Occurs when the TcpClient has been connected
+        /// </summary>
+        public event EventHandler<ConnectedArgs> ConnectedToServer;
+
+        /// <summary>
+        /// Occurs when the TcpClient has been disconnected
+        /// </summary>
+        public event EventHandler<DisconnectedArgs> DisconnectedFromServer;
 
         #endregion
         
@@ -72,13 +83,25 @@ namespace RappelzClientUpdater {
         /// Raises an event that informs the caller of a message that has occured
         /// </summary>
         /// <param name="e"></param>
-        protected void OnStatusUpdate(MessageArgs e) { StatusUpdate?.Invoke(this, e); }
+        protected void OnStatusUpdate(StatusUpdateArgs e) { StatusUpdate?.Invoke(this, e); }
 
         /// <summary>
         /// Raises an event that informs the caller of a game client change that has occured
         /// </summary>
         /// <param name="e"></param>
         protected void OnGameClientVersionUpdate(GameClientVersionArgs e) { GameClientVersionUpdate?.Invoke(this, e); }
+        
+        /// <summary>
+        /// Raises an event that informs the caller of a server connection that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnConnected(ConnectedArgs e) { ConnectedToServer?.Invoke(this, e); }
+        
+        /// <summary>
+        /// Raises an event that informs the caller of a server disconnection that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnDisconnected(DisconnectedArgs e) { DisconnectedFromServer?.Invoke(this, e); }
 
         #endregion
 
@@ -95,6 +118,11 @@ namespace RappelzClientUpdater {
         public short ServerPort { get; private set; }
 
         /// <summary>
+        /// Gets the network stream from server connection
+        /// </summary>
+        private NetworkStream Stream { get; set; }
+
+        /// <summary>
         /// Gets the local game client path
         /// </summary>
         public string ClientPath { get; set; }
@@ -107,7 +135,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Gets the network stream buffer size
         /// </summary>
-        public long NetworkBufferSize { get; private set; } = 1024;
+        public long NetworkBufferSize { get; set; } = 1024;
 
         /// <summary>
         /// Gets or sets the segmented client update method
@@ -119,7 +147,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Gets the DataCore instance associated with the updater
         /// </summary>
-        public Core DataCore { get; private set; }
+        public Core DataCore { get; } = new Core();
 
         #endregion
 
@@ -153,7 +181,37 @@ namespace RappelzClientUpdater {
             OperationalPath = (string.IsNullOrEmpty(operationalPath) ? Directory.GetCurrentDirectory() : operationalPath);
             NetworkBufferSize = networkBufferSize;
             SegmentedUpdate = segmentedUpdate;
-            DataCore = new Core();
+        }
+
+        #endregion
+
+        #region Methods
+
+        public void Begin() {
+
+            try {
+
+                // Connect to the server
+                Connect(ServerIp, ServerPort);
+
+                // Invoke connected event
+                OnConnected(new ConnectedArgs());
+            }
+            catch (Exception ex) {
+
+                // Invoke connection error
+                OnStatusUpdate(new StatusUpdateArgs(ex.Message, MessageType.Error));
+
+                // Exit method
+                return;
+            }
+
+            // Set NetworkStream property
+            Stream = GetStream();
+
+            byte[] buffer = new byte[NetworkBufferSize];
+            int bytesRead = Stream.Read(buffer, 0, buffer.Length);
+            string message = System.Text.Encoding.ASCII.GetString(buffer);
         }
 
         #endregion
