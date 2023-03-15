@@ -8,7 +8,7 @@ using RappelzClientUpdater.Events;
 
 namespace RappelzClientUpdater {
 
-    public class RappelzClientUpdater : TcpClient {
+    public class ClientUpdater : TcpClient {
 
         #region Events
 
@@ -126,7 +126,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Gets or sets the client fingerprint
         /// </summary>
-        public string Fingerprint { get; set; }
+        public string Fingerprint { get; private set; }
 
         /// <summary>
         /// Gets the local game client path
@@ -154,6 +154,66 @@ namespace RappelzClientUpdater {
         /// Gets the DataCore instance associated with the updater
         /// </summary>
         public Core DataCore { get; } = new Core();
+        
+        /// <summary>
+        /// Gets or sets the game client version
+        /// </summary>
+        public int Version {
+            get {
+
+                // Construct version file path
+                string versionPath = Path.Combine(ClientPath, "data.00A");
+
+                // Check if the version file exists
+                if (File.Exists(versionPath)) {
+
+                    // Read the version file bytes
+                    byte[] versionFileBytes = File.ReadAllBytes(versionPath);
+
+                    // Check for files integrity
+                    if (versionFileBytes == null || versionFileBytes.Length == 0) {
+
+                        // Invoke data file missing error
+                        OnStatusUpdate(new StatusUpdateArgs($"Invalid path to file \"{versionPath}\"", MessageType.Error));
+
+                        // Return fallbakc
+                        return int.MinValue;
+                    }
+
+                    // Convert the bytes to an integer and return it
+                    return BitConverter.ToInt32(versionFileBytes, 0);
+                } else {
+
+                    // Invoke data file missing error
+                    OnStatusUpdate(new StatusUpdateArgs($"Invalid path to file \"{versionPath}\"", MessageType.Error));
+
+                    // Return fallbakc
+                    return int.MinValue;
+                }
+            }
+
+            set {
+
+                // Check if the new version is different from the current version
+                if (Version == value) return;
+
+                // Construct version file path
+                string versionPath = Path.Combine(ClientPath, "data.00A");
+
+                // Check if the version file exists
+                if (File.Exists(versionPath)) {
+
+                    // Invoke data file missing error
+                    OnStatusUpdate(new StatusUpdateArgs($"Invalid path to file \"{versionPath}\"", MessageType.Error));
+                }
+
+                // Convert the new version to bytes
+                byte[] newVersion = BitConverter.GetBytes(value);
+
+                // Write the new version to the version file
+                File.WriteAllBytes(versionPath, newVersion);
+            }
+        }
 
         #endregion
 
@@ -162,7 +222,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Dummy constructor
         /// </summary>
-        public RappelzClientUpdater() { }
+        public ClientUpdater() { }
 
         /// <summary>
         /// Instantiates the client updater
@@ -173,10 +233,11 @@ namespace RappelzClientUpdater {
         /// <param name="operationalPath"></param>
         /// <param name="networkBufferSize"></param>
         /// <param name="segmentedUpdate"></param>
-        public RappelzClientUpdater(
+        public ClientUpdater(
             IPAddress serverIp,
             short serverPort,
             string clientPath,
+            string clientIdentifier = "",
             string operationalPath = "",
             long networkBufferSize = 1024,
             bool segmentedUpdate = true
@@ -184,6 +245,7 @@ namespace RappelzClientUpdater {
             ServerIp = serverIp;
             ServerPort = serverPort;
             ClientPath = (string.IsNullOrEmpty(clientPath) ? throw new DirectoryNotFoundException() : clientPath);
+            Fingerprint = (string.IsNullOrEmpty(clientIdentifier) ? "Armala.RappelzClientUpdater" : clientIdentifier);
             OperationalPath = (string.IsNullOrEmpty(operationalPath) ? Directory.GetCurrentDirectory() : operationalPath);
             NetworkBufferSize = networkBufferSize;
             SegmentedUpdate = segmentedUpdate;
@@ -193,7 +255,7 @@ namespace RappelzClientUpdater {
 
         #region Methods
 
-        public void Begin() {
+        public void ConnectAndAuthenticate() {
 
             try {
 
@@ -223,6 +285,9 @@ namespace RappelzClientUpdater {
                     // Close socket
                     if (Connected) Close();
 
+                    // Invoke disconnected status
+                    OnStatusUpdate(new StatusUpdateArgs("Server stream null or unreadable", MessageType.Error));
+
                     // Invoke disconnected event
                     OnDisconnected(new DisconnectedArgs());
 
@@ -240,14 +305,14 @@ namespace RappelzClientUpdater {
                     // Invoke connection error
                     OnAuthenticationRequest(new AuthenticationArgs());
 
-                    // Send password back to the server
-                    byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
-
                     // Check if stream exists and is writable
                     if (Stream == null || !Stream.CanWrite) {
 
                         // Close socket
                         if (Connected) Close();
+
+                        // Invoke disconnected status
+                        OnStatusUpdate(new StatusUpdateArgs("Server stream null or unwritable", MessageType.Error));
 
                         // Invoke disconnected event
                         OnDisconnected(new DisconnectedArgs());
@@ -257,7 +322,14 @@ namespace RappelzClientUpdater {
 
                     }
 
-                    // Write authentication
+                    // Send password back to the server
+                    byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
+
+                    // Create message length header bytes
+                    byte[] headerBytes = BitConverter.GetBytes(fingerprintBytes.Length);
+
+                    // Write header and authentication bytes
+                    Stream.Write(headerBytes, 0, headerBytes.Length);
                     Stream.Write(fingerprintBytes, 0, fingerprintBytes.Length);
 
                 // Authentication successful
@@ -278,6 +350,9 @@ namespace RappelzClientUpdater {
                     // Close socket
                     if (Connected) Close();
 
+                    // Invoke disconnected status
+                    OnStatusUpdate(new StatusUpdateArgs("Authentication failed or received unexpected result from the server", MessageType.Error));
+
                     // Invoke disconnected event
                     OnDisconnected(new DisconnectedArgs());
 
@@ -285,6 +360,40 @@ namespace RappelzClientUpdater {
                     return;
                 }
             }
+        }
+
+        public void BeginUpdate() {
+                
+            // Check if stream exists and is readable
+            if (Stream == null || !Stream.CanWrite) {
+
+                // Close socket
+                if (Connected) Close();
+
+                // Invoke disconnected status
+                OnStatusUpdate(new StatusUpdateArgs("Server stream null or unwritable", MessageType.Error));
+
+                // Invoke disconnected event
+                OnDisconnected(new DisconnectedArgs());
+
+                // Exit method
+                return;
+
+            }
+
+            // Construct update info parameters
+            string updateParameters = $"{Version}:{SegmentedUpdate}:us";
+
+            // Send password back to the server
+            byte[] messageBytes = Encoding.ASCII.GetBytes(updateParameters);
+
+            // Create message length header bytes
+            byte[] headerBytes = BitConverter.GetBytes(messageBytes.Length);
+
+            // Write update request
+            Stream.Write(headerBytes, 0, headerBytes.Length);
+            Stream.Write(messageBytes, 0, messageBytes.Length);
+
         }
 
         #endregion

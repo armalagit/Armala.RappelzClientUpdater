@@ -1,12 +1,10 @@
 ﻿using System;
 
-namespace DataCore
-{
+namespace DataCore {
     /// <summary>
     /// GUI / Console compatible message containing the message string and formatting information
     /// </summary>
-    public class MessageArgs : EventArgs
-    {
+    public class MessageArgs : EventArgs {
         /// <summary>
         /// String containing the message
         /// </summary>
@@ -32,15 +30,14 @@ namespace DataCore
         public MessageArgs(string message, params object[] args) { Message = string.Format(message, args); }
         public MessageArgs(string message, bool tab) { Message = message; Tab = true; TabCount = 1; }
         public MessageArgs(string message, bool tab, int tabCount) { Message = message; Tab = true; TabCount = tabCount; }
-        public MessageArgs(string message, bool tab, int tabCount, bool @break) { Message = message; Tab = true; TabCount = tabCount;  Break = @break;  BreakCount = 1; }
+        public MessageArgs(string message, bool tab, int tabCount, bool @break) { Message = message; Tab = true; TabCount = tabCount; Break = @break; BreakCount = 1; }
         public MessageArgs(string message, bool tab, int tabCount, bool @break, int breakCount) { Message = message; Tab = true; TabCount = tabCount; Break = @break; BreakCount = breakCount; }
     }
 
     /// <summary>
     /// Houses arguments passed to caller during raising of ErrorOccured event
     /// </summary>
-    public class ErrorArgs : EventArgs
-    {
+    public class ErrorArgs : EventArgs {
         /// <summary>
         /// string containing the error message
         /// </summary>
@@ -54,8 +51,7 @@ namespace DataCore
         public ErrorArgs(string error) { Error = error; }
     }
 
-    public class WarningArgs : EventArgs
-    {
+    public class WarningArgs : EventArgs {
         public string Warning { get; set; }
 
         public WarningArgs(string warning) { Warning = warning; }
@@ -64,8 +60,7 @@ namespace DataCore
     /// <summary>
     /// Houses arguments passed to caller during raising of CurrentMaxDetermined Event
     /// </summary>
-    public class CurrentMaxArgs : EventArgs
-    {
+    public class CurrentMaxArgs : EventArgs {
         public long Maximum { get; set; }
 
         public CurrentMaxArgs(long maximum) { Maximum = maximum; }
@@ -74,8 +69,7 @@ namespace DataCore
     /// <summary>
     /// Houses arguments passed to caller during raising of CurrentProgressChanged Event
     /// </summary>
-    public class CurrentChangedArgs : EventArgs
-    {
+    public class CurrentChangedArgs : EventArgs {
         /// <summary>
         /// Value that should be assigned to a 'Current' Progressbar.Value
         /// </summary>
@@ -98,8 +92,7 @@ namespace DataCore
     /// <summary>
     /// Houses arguments intended for Console applications
     /// </summary>
-    public class CurrentResetArgs : EventArgs
-    {
+    public class CurrentResetArgs : EventArgs {
         /// <summary>
         /// Determines if [OK] should be appended to the current line of a console when this event occurs
         /// </summary>
