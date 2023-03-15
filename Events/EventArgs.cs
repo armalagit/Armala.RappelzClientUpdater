@@ -1,4 +1,5 @@
-﻿using System;
+﻿using RappelzClientUpdater.Enums;
+using System;
 
 namespace RappelzClientUpdater.Events {
 

@@ -1,4 +1,4 @@
-﻿namespace RappelzClientUpdater.Events {
+﻿namespace RappelzClientUpdater.Enums {
 
     /// <summary>
     /// Defines the type of message to be set with MessageArgs

@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Text;
 using DataCore;
 using RappelzClientUpdater.Events;
+using RappelzClientUpdater.Enums;
 
 namespace RappelzClientUpdater {
 
@@ -66,13 +67,13 @@ namespace RappelzClientUpdater {
         /// Raises an event that informs the caller of an accepted authentication request that has occured
         /// </summary>
         /// <param name="e"></param>
-        protected void OnAuthenticationAccepted(AuthenticationArgs e) { AuthenticationRequest?.Invoke(this, e); }
+        protected void OnAuthenticationAccepted(AuthenticationArgs e) { AuthenticationAccepted?.Invoke(this, e); }
 
         /// <summary>
         /// Raises an event that informs the caller of a blocked or denied authentication request that has occured
         /// </summary>
         /// <param name="e"></param>
-        protected void OnAuthenticationDenied(AuthenticationArgs e) { AuthenticationRequest?.Invoke(this, e); }
+        protected void OnAuthenticationDenied(AuthenticationArgs e) { AuthenticationDenied?.Invoke(this, e); }
 
         /// <summary>
         /// Raises an event that informs the caller of a transfer process that has occured
@@ -244,7 +245,7 @@ namespace RappelzClientUpdater {
         ) {
             ServerIp = serverIp;
             ServerPort = serverPort;
-            ClientPath = (string.IsNullOrEmpty(clientPath) ? throw new DirectoryNotFoundException() : clientPath);
+            ClientPath = (string.IsNullOrEmpty(clientPath) ? throw new ArgumentNullException(nameof(clientPath)) : clientPath);
             Fingerprint = (string.IsNullOrEmpty(clientIdentifier) ? "Armala.RappelzClientUpdater" : clientIdentifier);
             OperationalPath = (string.IsNullOrEmpty(operationalPath) ? Directory.GetCurrentDirectory() : operationalPath);
             NetworkBufferSize = networkBufferSize;
@@ -262,11 +263,11 @@ namespace RappelzClientUpdater {
                 // Connect to the server
                 Connect(ServerIp, ServerPort);
 
-                // Invoke connected event
+                // Invoke OnConnected event
                 OnConnected(new ConnectedArgs());
             } catch (Exception ex) {
 
-                // Invoke connection error
+                // Invoke OnStatusUpdate event
                 OnStatusUpdate(new StatusUpdateArgs(ex.Message, MessageType.Error));
 
                 // Exit method
@@ -277,7 +278,7 @@ namespace RappelzClientUpdater {
             Stream = GetStream();
 
             // Loop until loop break or method exit
-            while (true) {
+            while (Connected) {
                 
                 // Check if stream exists and is readable
                 if (Stream == null || !Stream.CanRead) {
@@ -285,10 +286,10 @@ namespace RappelzClientUpdater {
                     // Close socket
                     if (Connected) Close();
 
-                    // Invoke disconnected status
+                    // Invoke OnStatusUpdate event
                     OnStatusUpdate(new StatusUpdateArgs("Server stream null or unreadable", MessageType.Error));
 
-                    // Invoke disconnected event
+                    // Invoke OnDisconnected event
                     OnDisconnected(new DisconnectedArgs());
 
                     // Exit method
@@ -296,13 +297,19 @@ namespace RappelzClientUpdater {
 
                 }
 
-                // Wait for the server's response
-                int responseByte = Stream.ReadByte();
+                // Create byte container for server response
+                byte[] responseBytes = new byte[4];
+
+                // Read server response to the container
+                Stream.Read(responseBytes, 0, 4);
+
+                // Convert byte array to an integer value
+                int responseCode = BitConverter.ToInt32(responseBytes, 0);
 
                 // Authentication requested
-                if (responseByte == 0x01) {
+                if (responseCode == 511) {
 
-                    // Invoke connection error
+                    // Invoke OnAuthenticationRequest event
                     OnAuthenticationRequest(new AuthenticationArgs());
 
                     // Check if stream exists and is writable
@@ -311,10 +318,10 @@ namespace RappelzClientUpdater {
                         // Close socket
                         if (Connected) Close();
 
-                        // Invoke disconnected status
+                        // Invoke OnStatusUpdate event
                         OnStatusUpdate(new StatusUpdateArgs("Server stream null or unwritable", MessageType.Error));
 
-                        // Invoke disconnected event
+                        // Invoke OnDisconnected event
                         OnDisconnected(new DisconnectedArgs());
 
                         // Exit method
@@ -329,13 +336,13 @@ namespace RappelzClientUpdater {
                     byte[] headerBytes = BitConverter.GetBytes(fingerprintBytes.Length);
 
                     // Write header and authentication bytes
-                    Stream.Write(headerBytes, 0, headerBytes.Length);
+                    Stream.Write(headerBytes, 0, 4);
                     Stream.Write(fingerprintBytes, 0, fingerprintBytes.Length);
 
                 // Authentication successful
-                } else if (responseByte == 0x02) {
+                } else if (responseCode == 202) {
 
-                    // Invoke connection accepted
+                    // Invoke OnAuthenticationAccepted event
                     OnAuthenticationAccepted(new AuthenticationArgs());
 
                     // Break loop
@@ -344,16 +351,16 @@ namespace RappelzClientUpdater {
                 // Authentication failed or unexpected response
                 } else {
 
-                    // Invoke connection denied
+                    // Invoke OnAuthenticationDenied event
                     OnAuthenticationDenied(new AuthenticationArgs());
 
                     // Close socket
                     if (Connected) Close();
 
-                    // Invoke disconnected status
+                    // Invoke OnStatusUpdate event
                     OnStatusUpdate(new StatusUpdateArgs("Authentication failed or received unexpected result from the server", MessageType.Error));
 
-                    // Invoke disconnected event
+                    // Invoke OnDisconnected event
                     OnDisconnected(new DisconnectedArgs());
 
                     // Exit method
@@ -370,10 +377,10 @@ namespace RappelzClientUpdater {
                 // Close socket
                 if (Connected) Close();
 
-                // Invoke disconnected status
+                // Invoke OnStatusUpdate event
                 OnStatusUpdate(new StatusUpdateArgs("Server stream null or unwritable", MessageType.Error));
 
-                // Invoke disconnected event
+                // Invoke OnDisconnected event
                 OnDisconnected(new DisconnectedArgs());
 
                 // Exit method
@@ -391,7 +398,7 @@ namespace RappelzClientUpdater {
             byte[] headerBytes = BitConverter.GetBytes(messageBytes.Length);
 
             // Write update request
-            Stream.Write(headerBytes, 0, headerBytes.Length);
+            Stream.Write(headerBytes, 0, 4);
             Stream.Write(messageBytes, 0, messageBytes.Length);
 
         }
