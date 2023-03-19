@@ -53,13 +53,13 @@ namespace RappelzClientUpdater.Events {
         /// </summary>
         public string Hash { get; set; } = string.Empty;
         /// <summary>
-        /// long containing the total transfer byte length
+        /// int containing the total transfer byte length
         /// </summary>
-        public long TotalLength { get; set; }
+        public int TotalLength { get; set; }
         /// <summary>
-        /// long containing the received byte length
+        /// int containing the received byte length
         /// </summary>
-        public long ReceivedLength { get; set; }
+        public int ReceivedLength { get; set; }
 
         /// <summary>
         /// Constructor for the TransferProcessArgs, inheriting from Eventargs
@@ -69,7 +69,7 @@ namespace RappelzClientUpdater.Events {
         /// <param name="hash">MD5 checksum to be set</param>
         /// <param name="totalLength">Total byte length to be set</param>
         /// <param name="receivedLength">Received byte length to be set</param>
-        public TransferProcessArgs(string name, string hash, long totalLength, long receivedLength) { 
+        public TransferProcessArgs(string name, string hash, int totalLength, int receivedLength) { 
             FileName = name; 
             Hash = hash; 
             TotalLength = totalLength; 
