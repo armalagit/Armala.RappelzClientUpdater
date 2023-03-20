@@ -1,4 +1,4 @@
-﻿using RappelzClientUpdater.Enums;
+using RappelzClientUpdater.Enums;
 using System;
 
 namespace RappelzClientUpdater.Events {
@@ -53,13 +53,13 @@ namespace RappelzClientUpdater.Events {
         /// </summary>
         public string Hash { get; set; } = string.Empty;
         /// <summary>
-        /// int containing the total transfer byte length
+        /// long containing the total transfer byte length
         /// </summary>
-        public int TotalLength { get; set; }
+        public long TotalLength { get; set; }
         /// <summary>
-        /// int containing the received byte length
+        /// long containing the received byte length
         /// </summary>
-        public int ReceivedLength { get; set; }
+        public long ReceivedLength { get; set; }
 
         /// <summary>
         /// Constructor for the TransferProcessArgs, inheriting from Eventargs
@@ -69,7 +69,7 @@ namespace RappelzClientUpdater.Events {
         /// <param name="hash">MD5 checksum to be set</param>
         /// <param name="totalLength">Total byte length to be set</param>
         /// <param name="receivedLength">Received byte length to be set</param>
-        public TransferProcessArgs(string name, string hash, int totalLength, int receivedLength) { 
+        public TransferProcessArgs(string name, string hash, long totalLength, long receivedLength) { 
             FileName = name; 
             Hash = hash; 
             TotalLength = totalLength; 
