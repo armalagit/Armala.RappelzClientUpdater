@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using System.Net.Sockets;
@@ -151,7 +151,7 @@ namespace RappelzClientUpdater {
         /// <summary>
         /// Gets the network stream buffer size
         /// </summary>
-        public int NetworkBufferSize { get; set; } = 1024;
+        public int NetworkBufferSize { get; set; } = 8096;
 
         /// <summary>
         /// Gets or sets the segmented client update method
@@ -255,7 +255,7 @@ namespace RappelzClientUpdater {
             string clientIdentifier = "",
             string operationalPath = "",
             string locale = "us",
-            int networkBufferSize = 1024,
+            int networkBufferSize = 8096,
             bool segmentedUpdate = true
         ) {
             ServerIp = serverIp;
@@ -275,16 +275,17 @@ namespace RappelzClientUpdater {
         public void ConnectAndAuthenticate() {
 
             try {
-
                 // Connect to the server
                 Connect(ServerIp, ServerPort);
 
                 // Invoke OnConnected event
                 OnConnected(new ConnectedArgs());
             } catch (Exception ex) {
-
                 // Invoke OnStatusUpdate event
                 OnStatusUpdate(new StatusUpdateArgs(ex.Message, MessageType.Error));
+
+                // Invoke OnDisconnected event
+                OnDisconnected(new DisconnectedArgs());
 
                 // Exit method
                 return;
@@ -293,64 +294,58 @@ namespace RappelzClientUpdater {
             // Set NetworkStream property
             Stream = GetStream();
 
+            BinaryReader binaryReader = new BinaryReader(Stream);
+            BinaryWriter binaryWriter = new BinaryWriter(Stream);
+
             // Loop until loop break or method exit
-            while (Connected) {
-
-                // Receive authentication length
-                byte[] headerBytes = new byte[4];
-                Stream.Read(headerBytes, 0, 4);
-
-                int messageLength = BitConverter.ToInt32(headerBytes, 0);
-
-                // Receive authentication
-                byte[] responseBytes = new byte[messageLength];
-                Stream.Read(responseBytes, 0, messageLength);
-
+            bool authenticated = false;
+            while (!authenticated) {
+                
                 // Convert byte array to an integer value
-                int responseCode = BitConverter.ToInt32(responseBytes, 0);
+                int responseCode = binaryReader.ReadInt32();
+                switch (responseCode) {
+                    // Authentication requested
+                    case 511:
 
-                // Authentication requested
-                if (responseCode == 511) {
+                        // Invoke OnAuthenticationRequest event
+                        OnAuthenticationRequest(new AuthenticationArgs());
 
-                    // Invoke OnAuthenticationRequest event
-                    OnAuthenticationRequest(new AuthenticationArgs());
+                        // Send password back to the server
+                        byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
 
-                    // Send password back to the server
-                    byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
+                        // Write header and authentication bytes
+                        binaryWriter.Write(fingerprintBytes.Length);
+                        binaryWriter.Write(fingerprintBytes);
 
-                    // Create message length header bytes
-                    headerBytes = BitConverter.GetBytes(fingerprintBytes.Length);
-
-                    // Write header and authentication bytes
-                    Stream.Write(headerBytes, 0, 4);
-                    Stream.Write(fingerprintBytes, 0, fingerprintBytes.Length);
-
+                        break;
+                        
                     // Authentication successful
-                } else if (responseCode == 202) {
+                    case 202:
 
-                    // Invoke OnAuthenticationAccepted event
-                    OnAuthenticationAccepted(new AuthenticationArgs());
+                        // Invoke OnAuthenticationAccepted event
+                        OnAuthenticationAccepted(new AuthenticationArgs());
 
-                    // Break loop
-                    break;
+                        // Set boolean to break the loop
+                        authenticated = true;
 
+                        break;
+                        
                     // Authentication failed or unexpected response
-                } else {
+                    default:
 
-                    // Invoke OnAuthenticationDenied event
-                    OnAuthenticationDenied(new AuthenticationArgs());
+                        // Invoke OnAuthenticationDenied event
+                        OnAuthenticationDenied(new AuthenticationArgs());
 
-                    // Close socket
-                    if (Connected) Close();
+                        // Close socket
+                        if (Connected) Close();
 
-                    // Invoke OnStatusUpdate event
-                    OnStatusUpdate(new StatusUpdateArgs("Authentication failed or received unexpected result from the server", MessageType.Error));
+                        // Invoke OnStatusUpdate event
+                        OnStatusUpdate(new StatusUpdateArgs("Authentication failed or received unexpected result from the server", MessageType.Error));
 
-                    // Invoke OnDisconnected event
-                    OnDisconnected(new DisconnectedArgs());
+                        // Invoke OnDisconnected event
+                        OnDisconnected(new DisconnectedArgs());
 
-                    // Exit method
-                    return;
+                        break;
                 }
             }
         }
@@ -359,21 +354,22 @@ namespace RappelzClientUpdater {
 
             // Ensure local patch info directory exists
             string localPatchInfoDir = Path.Combine(OperationalPath, ".patch-info");
-            if (!Directory.Exists(localPatchInfoDir)) Directory.CreateDirectory(localPatchInfoDir);
-            DirectoryInfo directoryInfo = new DirectoryInfo(localPatchInfoDir);
-            directoryInfo.Attributes |= FileAttributes.Hidden;
+            if (!Directory.Exists(localPatchInfoDir)) {
+                Directory.CreateDirectory(localPatchInfoDir);
+                File.SetAttributes(localPatchInfoDir, File.GetAttributes(localPatchInfoDir) | FileAttributes.Hidden);
+            }
+
+            BinaryReader binaryReader = new BinaryReader(Stream);
+            BinaryWriter binaryWriter = new BinaryWriter(Stream);
 
             // Request for latest client versions
             byte[] messageBytes = Encoding.ASCII.GetBytes("update-seek");
-            Stream.Write(BitConverter.GetBytes(messageBytes.Length), 0, 4);
-            Stream.Write(messageBytes, 0, messageBytes.Length);
-
-            // Receive latest client versions
-            byte[] headerBytes = new byte[4];
-            Stream.Read(headerBytes, 0, 4);
-            byte[] responseBytes = new byte[BitConverter.ToInt32(headerBytes, 0)];
-            Stream.Read(responseBytes, 0, responseBytes.Length);
-            string message = Encoding.UTF8.GetString(responseBytes); // lang:version:lang:version:lang:version
+            binaryWriter.Write(messageBytes.Length);
+            binaryWriter.Write(messageBytes);
+            
+            int messageLength = binaryReader.ReadInt32();
+            byte[] responseBytes = binaryReader.ReadBytes(messageLength);
+            string message = Encoding.UTF8.GetString(responseBytes);
 
             // Deserialize client versions into dictionary
             string[] langVersions = message.Split(':');
@@ -392,45 +388,37 @@ namespace RappelzClientUpdater {
                     OnStatusUpdate(new StatusUpdateArgs("Requesting game client updates", MessageType.Information));
 
                     messageBytes = Encoding.ASCII.GetBytes($"update-get:{SegmentedUpdate}:{Version}:{Locale}");
-                    Stream.Write(BitConverter.GetBytes(messageBytes.Length), 0, 4);
-                    Stream.Write(messageBytes, 0, messageBytes.Length);
+                    binaryWriter.Write(messageBytes.Length);
+                    binaryWriter.Write(messageBytes);
 
-                    headerBytes = new byte[8];
-                    Stream.Read(headerBytes, 0, 8);
-                    int incomingVersion = BitConverter.ToInt32(headerBytes, 0);
-                    int messageLength = BitConverter.ToInt32(headerBytes, 4);
-
-                    // Create buffer
-                    byte[] messageBuffer = new byte[NetworkBufferSize];
-                    
-                    // Create byte array container for message
+                    int incomingVersion = binaryReader.ReadInt32();
+                    messageLength = binaryReader.ReadInt32();
                     messageBytes = new byte[messageLength];
 
-                    // Create a variable to determine the count of bytes already
-                    int byteCountRead = 0;
-
                     // Loop while there are bytes to read
+                    int byteCountRead = 0;
                     while (byteCountRead < messageLength) {
 
                         // Calculate bytes left to read
                         int bytesLeftToRead = Math.Min(NetworkBufferSize, messageLength - byteCountRead);
-
-                        // Read a chunk of 1024 bytes from the stream into the message buffer
-                        int bytesRead = Stream.Read(messageBuffer, 0, bytesLeftToRead);
+                        
+                        // Read a chunk of bytes from the stream into the message buffer
+                        byte[] messageBuffer = binaryReader.ReadBytes(bytesLeftToRead);
 
                         // Copy byte array from the buffer to the actual message byte array
                         Array.Copy(messageBuffer, 0, messageBytes, byteCountRead, bytesLeftToRead);
 
                         // Increment read byte count
-                        byteCountRead += bytesRead;
+                        byteCountRead += messageBuffer.Length;
 
                         // Invoke OnTransferProcess
                         OnTransferProcess(new TransferProcessArgs(string.Empty, string.Empty, messageLength, byteCountRead));
                     }
 
                     // Save patch info file to directory
-                    string targetPath = Path.Combine(localPatchInfoDir, $"{Locale.ToUpper()}{incomingVersion}.tpf");
-                    File.WriteAllText(targetPath, Encoding.ASCII.GetString(messageBytes));
+                    string savePath = Path.Combine(localPatchInfoDir, $"{Locale.ToUpper()}{incomingVersion}.tpf");
+                    File.WriteAllText(savePath, Encoding.ASCII.GetString(messageBytes));
+                    File.SetAttributes(savePath, File.GetAttributes(savePath) | FileAttributes.Hidden);
 
                     // Convert message byte array to readable string
                     DownloadUpdates(incomingVersion);
@@ -452,9 +440,10 @@ namespace RappelzClientUpdater {
 
             // Ensure local patch file directory exists
             string localPatchFilesDir = Path.Combine(OperationalPath, ".patch-files");
-            if (!Directory.Exists(localPatchFilesDir)) Directory.CreateDirectory(localPatchFilesDir);
-            DirectoryInfo directoryInfo = new DirectoryInfo(localPatchFilesDir);
-            directoryInfo.Attributes |= FileAttributes.Hidden;
+            if (!Directory.Exists(localPatchFilesDir)) {
+                Directory.CreateDirectory(localPatchFilesDir);
+                File.SetAttributes(localPatchFilesDir, File.GetAttributes(localPatchFilesDir) | FileAttributes.Hidden);
+            }
 
             // open the file
             using (StreamReader reader = new StreamReader(filePath)) {
@@ -467,24 +456,22 @@ namespace RappelzClientUpdater {
 
                     string[] patchFileArray = line.Split(':');
                     string hashFileName = patchFileArray[3];
-                    _ = int.TryParse(patchFileArray[6], out int fileSize);
                     string patchFile = $"{patchFileArray[8]}{patchFileArray[3]}";
+
+                    BinaryReader binaryReader = new BinaryReader(Stream);
+                    BinaryWriter binaryWriter = new BinaryWriter(Stream);
 
                     // Request for latest client versions
                     byte[] messageBytes = Encoding.ASCII.GetBytes($"update-download:{Locale}{patchFile}");
-                    Stream.Write(BitConverter.GetBytes(messageBytes.Length), 0, 4);
-                    Stream.Write(messageBytes, 0, messageBytes.Length);
-                    
-                    byte[] headerBytes = new byte[4];
-                    Stream.Read(headerBytes, 0, 4);
-                    int messageLength = BitConverter.ToInt32(headerBytes, 0);
+                    binaryWriter.Write(messageBytes.Length);
+                    binaryWriter.Write(messageBytes);
 
                     // Prepare local file
                     string savePath = Path.Combine(localPatchFilesDir, hashFileName);
                     if (File.Exists(savePath)) File.Delete(savePath);
 
                     // Create buffer
-                    byte[] incomingBuffer = new byte[NetworkBufferSize];
+                    int messageLength = binaryReader.ReadInt32();
 
                     // Read the file from stream
                     int byteCountRead = 0;
@@ -494,19 +481,21 @@ namespace RappelzClientUpdater {
                             // This selects either the buffer size or if remaining byte length is smaller than buffer length it write that
                             int bytesLeftToRead = Math.Min(NetworkBufferSize, messageLength - byteCountRead);
 
-                            // Read a chunk of 1024 bytes from the stream into the buffer
-                            int bytesRead = Stream.Read(incomingBuffer, 0, bytesLeftToRead);
+                            // Read a chunk of bytes from the stream into the message buffer
+                            byte[] messageBuffer = binaryReader.ReadBytes(bytesLeftToRead);
 
                             // Write the chunk to the file stream
-                            fileStream.Write(incomingBuffer, 0, bytesRead);
+                            fileStream.Write(messageBuffer, 0, messageBuffer.Length);
 
                             // Increment read byte count
-                            byteCountRead += bytesRead;
+                            byteCountRead += messageBuffer.Length;
 
                             // Invoke OnTransferProcess
                             OnTransferProcess(new TransferProcessArgs(hashFileName, string.Empty, messageLength, byteCountRead));
                         }
                     }
+
+                    File.SetAttributes(savePath, File.GetAttributes(savePath) | FileAttributes.Hidden);
                 }
 
                 Version = version;
