@@ -7,9 +7,7 @@ using DataCore;
 using RappelzClientUpdater.Events;
 using RappelzClientUpdater.Enums;
 using System.Collections.Generic;
-using System.Runtime.InteropServices.ComTypes;
-using System.ComponentModel;
-using System.Diagnostics;
+using DataCore.Functions;
 
 namespace RappelzClientUpdater {
 
@@ -33,9 +31,14 @@ namespace RappelzClientUpdater {
         public event EventHandler<AuthenticationArgs> AuthenticationDenied;
 
         /// <summary>
-        /// Occurs when a NetworkStream byte transfer is commencing
+        /// Occurs when a NetworkStream byte transfer is in process
         /// </summary>
-        public event EventHandler<TransferProcessArgs> TransferProcess;
+        public event EventHandler<CurrentTransferProcessArgs> CurrentTransferProcess;
+
+        /// <summary>
+        /// Occurs when a NetworkStream byte transfer length has been determined
+        /// </summary>
+        public event EventHandler<MaxTransferProcessArgs> MaxTransferProcess;
 
         /// <summary>
         /// Occurs when a new message is available to be displayed
@@ -83,7 +86,13 @@ namespace RappelzClientUpdater {
         /// Raises an event that informs the caller of a transfer process that has occured
         /// </summary>
         /// <param name="e"></param>
-        protected void OnTransferProcess(TransferProcessArgs e) { TransferProcess?.Invoke(this, e); }
+        protected void OnCurrentTransferProcess(CurrentTransferProcessArgs e) { CurrentTransferProcess?.Invoke(this, e); }
+
+        /// <summary>
+        /// Raises an event that informs the caller of a new transfer length that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnMaxTransferProcess(MaxTransferProcessArgs e) { MaxTransferProcess?.Invoke(this, e); }
 
         /// <summary>
         /// Raises an event that informs the caller of a message that has occured
@@ -159,6 +168,11 @@ namespace RappelzClientUpdater {
         /// When non-segmented update has been set the client version will be updated from lowest version to highest possible
         /// </summary>
         public bool SegmentedUpdate { get; set; } = true;
+
+        /// <summary>
+        /// Gets or sets value whether to keep the update files or delete the after packing
+        /// </summary>
+        public bool KeepUpdateFiles { get; set; } = true;
 
         /// <summary>
         /// Gets the DataCore instance associated with the updater
@@ -246,26 +260,26 @@ namespace RappelzClientUpdater {
         /// <param name="clientPath"></param>
         /// <param name="operationalPath"></param>
         /// <param name="locale"></param>
-        /// <param name="networkBufferSize"></param>
-        /// <param name="segmentedUpdate"></param>
         public ClientUpdater(
             IPAddress serverIp,
             short serverPort,
             string clientPath,
             string clientIdentifier = "",
             string operationalPath = "",
-            string locale = "us",
-            int networkBufferSize = 8096,
-            bool segmentedUpdate = true
+            string locale = "us"
         ) {
             ServerIp = serverIp;
             ServerPort = serverPort;
             ClientPath = (string.IsNullOrEmpty(clientPath) ? throw new ArgumentNullException(nameof(clientPath)) : clientPath);
+            DataCore.Load(ClientPath);
             Fingerprint = (string.IsNullOrEmpty(clientIdentifier) ? "Armala.RappelzClientUpdater" : clientIdentifier);
             OperationalPath = (string.IsNullOrEmpty(operationalPath) ? Directory.GetCurrentDirectory() : operationalPath);
             Locale = (string.IsNullOrEmpty(locale) ? throw new ArgumentNullException(nameof(locale)) : locale);
-            NetworkBufferSize = networkBufferSize;
-            SegmentedUpdate = segmentedUpdate;
+
+            DataCore.MessageOccured += (e, args) => { OnStatusUpdate(new StatusUpdateArgs(args.Message, MessageType.Information)); };
+            DataCore.WarningOccured += (e, args) => { OnStatusUpdate(new StatusUpdateArgs(args.Warning, MessageType.Warning)); };
+            DataCore.CurrentMaxDetermined += (e, args) => { OnMaxTransferProcess(new MaxTransferProcessArgs(args.Maximum)); };
+            DataCore.CurrentProgressChanged += (e, args) => { OnCurrentTransferProcess(new CurrentTransferProcessArgs(args.Status, args.Value)); };
         }
 
         #endregion
@@ -294,15 +308,15 @@ namespace RappelzClientUpdater {
             // Set NetworkStream property
             Stream = GetStream();
 
-            BinaryReader binaryReader = new BinaryReader(Stream);
-            BinaryWriter binaryWriter = new BinaryWriter(Stream);
+            BinaryReader br = new BinaryReader(Stream);
+            BinaryWriter bw = new BinaryWriter(Stream);
 
             // Loop until loop break or method exit
             bool authenticated = false;
             while (!authenticated) {
                 
                 // Convert byte array to an integer value
-                int responseCode = binaryReader.ReadInt32();
+                int responseCode = br.ReadInt32();
                 switch (responseCode) {
                     // Authentication requested
                     case 511:
@@ -314,8 +328,8 @@ namespace RappelzClientUpdater {
                         byte[] fingerprintBytes = Encoding.ASCII.GetBytes(Fingerprint);
 
                         // Write header and authentication bytes
-                        binaryWriter.Write(fingerprintBytes.Length);
-                        binaryWriter.Write(fingerprintBytes);
+                        bw.Write(fingerprintBytes.Length);
+                        bw.Write(fingerprintBytes);
 
                         break;
                         
@@ -359,16 +373,16 @@ namespace RappelzClientUpdater {
                 File.SetAttributes(localPatchInfoDir, File.GetAttributes(localPatchInfoDir) | FileAttributes.Hidden);
             }
 
-            BinaryReader binaryReader = new BinaryReader(Stream);
-            BinaryWriter binaryWriter = new BinaryWriter(Stream);
+            BinaryReader br = new BinaryReader(Stream);
+            BinaryWriter bw = new BinaryWriter(Stream);
 
             // Request for latest client versions
             byte[] messageBytes = Encoding.ASCII.GetBytes("update-seek");
-            binaryWriter.Write(messageBytes.Length);
-            binaryWriter.Write(messageBytes);
+            bw.Write(messageBytes.Length);
+            bw.Write(messageBytes);
             
-            int messageLength = binaryReader.ReadInt32();
-            byte[] responseBytes = binaryReader.ReadBytes(messageLength);
+            int messageLength = br.ReadInt32();
+            byte[] responseBytes = br.ReadBytes(messageLength);
             string message = Encoding.UTF8.GetString(responseBytes);
 
             // Deserialize client versions into dictionary
@@ -381,6 +395,8 @@ namespace RappelzClientUpdater {
 
             if (dictionary.ContainsKey(Locale) && dictionary[Locale] > Version) {
 
+                DataCore.Load(ClientPath);
+
                 int latestVersion = dictionary[Locale];
                 while (Version < latestVersion) {
 
@@ -388,35 +404,19 @@ namespace RappelzClientUpdater {
                     OnStatusUpdate(new StatusUpdateArgs("Requesting game client updates", MessageType.Information));
 
                     messageBytes = Encoding.ASCII.GetBytes($"update-get:{SegmentedUpdate}:{Version}:{Locale}");
-                    binaryWriter.Write(messageBytes.Length);
-                    binaryWriter.Write(messageBytes);
+                    bw.Write(messageBytes.Length);
+                    bw.Write(messageBytes);
 
-                    int incomingVersion = binaryReader.ReadInt32();
-                    messageLength = binaryReader.ReadInt32();
-                    messageBytes = new byte[messageLength];
+                    int incomingVersion = br.ReadInt32();
+                    messageLength = br.ReadInt32();
+                    messageBytes = br.ReadBytes(messageLength);
 
-                    // Loop while there are bytes to read
-                    int byteCountRead = 0;
-                    while (byteCountRead < messageLength) {
-
-                        // Calculate bytes left to read
-                        int bytesLeftToRead = Math.Min(NetworkBufferSize, messageLength - byteCountRead);
-                        
-                        // Read a chunk of bytes from the stream into the message buffer
-                        byte[] messageBuffer = binaryReader.ReadBytes(bytesLeftToRead);
-
-                        // Copy byte array from the buffer to the actual message byte array
-                        Array.Copy(messageBuffer, 0, messageBytes, byteCountRead, bytesLeftToRead);
-
-                        // Increment read byte count
-                        byteCountRead += messageBuffer.Length;
-
-                        // Invoke OnTransferProcess
-                        OnTransferProcess(new TransferProcessArgs(string.Empty, string.Empty, messageLength, byteCountRead));
-                    }
+                    // Invoke OnStatusUpdate event
+                    OnStatusUpdate(new StatusUpdateArgs($"Received update info for version {incomingVersion}", MessageType.Information));
 
                     // Save patch info file to directory
                     string savePath = Path.Combine(localPatchInfoDir, $"{Locale.ToUpper()}{incomingVersion}.tpf");
+                    if (File.Exists(savePath)) File.Delete(savePath);
                     File.WriteAllText(savePath, Encoding.ASCII.GetString(messageBytes));
                     File.SetAttributes(savePath, File.GetAttributes(savePath) | FileAttributes.Hidden);
 
@@ -458,31 +458,34 @@ namespace RappelzClientUpdater {
                     string hashFileName = patchFileArray[3];
                     string patchFile = $"{patchFileArray[8]}{patchFileArray[3]}";
 
-                    BinaryReader binaryReader = new BinaryReader(Stream);
-                    BinaryWriter binaryWriter = new BinaryWriter(Stream);
+                    BinaryReader br = new BinaryReader(Stream);
+                    BinaryWriter bw = new BinaryWriter(Stream);
 
                     // Request for latest client versions
                     byte[] messageBytes = Encoding.ASCII.GetBytes($"update-download:{Locale}{patchFile}");
-                    binaryWriter.Write(messageBytes.Length);
-                    binaryWriter.Write(messageBytes);
+                    bw.Write(messageBytes.Length);
+                    bw.Write(messageBytes);
 
-                    // Prepare local file
-                    string savePath = Path.Combine(localPatchFilesDir, hashFileName);
+                    string saveDirectory = Path.Combine(localPatchFilesDir, $"{version}");
+                    if (!Directory.Exists(saveDirectory)) Directory.CreateDirectory(saveDirectory);
+                    string savePath = Path.Combine(saveDirectory, hashFileName);
                     if (File.Exists(savePath)) File.Delete(savePath);
 
-                    // Create buffer
-                    int messageLength = binaryReader.ReadInt32();
+                    long messageLength = br.ReadInt64();
+
+                    // Invoke OnMaxTransferProcess
+                    OnMaxTransferProcess(new MaxTransferProcessArgs(messageLength));
 
                     // Read the file from stream
-                    int byteCountRead = 0;
+                    long byteCountRead = 0;
                     using (FileStream fileStream = new FileStream(savePath, FileMode.OpenOrCreate, FileAccess.ReadWrite)) {
                         while (byteCountRead < messageLength) {
 
                             // This selects either the buffer size or if remaining byte length is smaller than buffer length it write that
-                            int bytesLeftToRead = Math.Min(NetworkBufferSize, messageLength - byteCountRead);
+                            int bytesLeftToRead = (int)Math.Min(NetworkBufferSize, messageLength - byteCountRead);
 
                             // Read a chunk of bytes from the stream into the message buffer
-                            byte[] messageBuffer = binaryReader.ReadBytes(bytesLeftToRead);
+                            byte[] messageBuffer = br.ReadBytes(bytesLeftToRead);
 
                             // Write the chunk to the file stream
                             fileStream.Write(messageBuffer, 0, messageBuffer.Length);
@@ -490,16 +493,44 @@ namespace RappelzClientUpdater {
                             // Increment read byte count
                             byteCountRead += messageBuffer.Length;
 
-                            // Invoke OnTransferProcess
-                            OnTransferProcess(new TransferProcessArgs(hashFileName, string.Empty, messageLength, byteCountRead));
+                            // Invoke OnCurrentTransferProcess
+                            OnCurrentTransferProcess(new CurrentTransferProcessArgs(hashFileName, byteCountRead));
                         }
                     }
 
                     File.SetAttributes(savePath, File.GetAttributes(savePath) | FileAttributes.Hidden);
                 }
 
-                Version = version;
+                PushUpdates(version);
+
             }
+        }
+
+        private void PushUpdates(int version) {
+
+            // Invoke OnStatusUpdate event
+            OnStatusUpdate(new StatusUpdateArgs($"Packing version {version} updates", MessageType.Information));
+
+            string patchFileDirectory = Path.Combine(OperationalPath, ".patch-files", $"{version}");
+            if (!Directory.Exists(patchFileDirectory)) throw new DirectoryNotFoundException(patchFileDirectory);
+
+            string[] files = Directory.GetFiles(patchFileDirectory);
+            foreach (string fileFullName in files) {
+
+                string cipheredFileName = Path.GetFileName(fileFullName);
+                string fileName = StringCipher.Decode(cipheredFileName);
+
+                // Invoke OnStatusUpdate event
+                OnStatusUpdate(new StatusUpdateArgs($"Packing \"{fileName}\"", MessageType.Information));
+
+                DataCore.ImportFileEntry(fileName, File.ReadAllBytes(fileFullName));
+
+                if (!KeepUpdateFiles) File.Delete(fileFullName);
+            }
+
+            if (Directory.GetFiles(patchFileDirectory).Length < 1) Directory.Delete(patchFileDirectory);
+
+            Version = version;
         }
 
         #endregion
