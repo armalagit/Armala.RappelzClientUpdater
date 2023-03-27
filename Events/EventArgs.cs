@@ -133,4 +133,73 @@ namespace RappelzClientUpdater.Events
         public DisconnectedArgs() { }
     }
 
+    /// <summary>
+    /// Houses arguments passed to caller during raising of LoginValidation event
+    /// </summary>
+    public class LoginValidationArgs : EventArgs
+    {
+        /// <summary>
+        /// string containing the username
+        /// </summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// string containing the password
+        /// </summary>
+        public string Password { get; set; }
+
+        /// <summary>
+        /// Constructor for the LoginValidationArgs, inheriting from Eventargs
+        /// </summary>
+        public LoginValidationArgs(string username, string password) {
+            Username = username;
+            Password = password;
+        }
+    }
+
+    /// <summary>
+    /// Houses arguments passed to caller during raising of LoginValidation event
+    /// </summary>
+    public class LoginValidationSuccessArgs : EventArgs
+    {
+        /// <summary>
+        /// string containing the username
+        /// </summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// int containing the account id
+        /// </summary>
+        public int AccountId { get; set; }
+
+        /// <summary>
+        /// Constructor for the LoginValidationArgs, inheriting from Eventargs
+        /// </summary>
+        public LoginValidationSuccessArgs(string username, int accountId) {
+            Username = username;
+            AccountId = accountId;
+        }
+    }
+
+    /// <summary>
+    /// Houses arguments passed to caller during raising of LoginValidation event
+    /// </summary>
+    public class LoginValidationFailedArgs : EventArgs
+    {
+        /// <summary>
+        /// string containing the username
+        /// </summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// string containing the password
+        /// </summary>
+        public string Password { get; set; }
+
+        /// <summary>
+        /// Constructor for the LoginValidationArgs, inheriting from Eventargs
+        /// </summary>
+        public LoginValidationFailedArgs(string username, string password) {
+            Username = username;
+            Password = password;
+        }
+    }
+
 }

@@ -60,6 +60,21 @@ namespace RappelzClientUpdater {
         /// </summary>
         public event EventHandler<DisconnectedArgs> DisconnectedFromServer;
 
+        /// <summary>
+        /// Occurs when a client requests an authentication by username and password
+        /// </summary>
+        public event EventHandler<LoginValidationArgs> LoginValidation;
+
+        /// <summary>
+        /// Occurs when a client authenticates by username and password
+        /// </summary>
+        public event EventHandler<LoginValidationSuccessArgs> LoginValidationSuccess;
+
+        /// <summary>
+        /// Occurs when a client fails an authentication by username and password
+        /// </summary>
+        public event EventHandler<LoginValidationFailedArgs> LoginValidationFailed;
+
         #endregion
 
         #region Event Delegates
@@ -117,6 +132,24 @@ namespace RappelzClientUpdater {
         /// </summary>
         /// <param name="e"></param>
         protected void OnDisconnected(DisconnectedArgs e) { DisconnectedFromServer?.Invoke(this, e); }
+
+        /// <summary>
+        /// Raises an event that informs the caller of a client authentication, by username and password, that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnLoginValidation(LoginValidationArgs e) { LoginValidation?.Invoke(this, e); }
+
+        /// <summary>
+        /// Raises an event that informs the caller of a successful client authentication, by username and password, that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnLoginValidationSuccess(LoginValidationSuccessArgs e) { LoginValidationSuccess?.Invoke(this, e); }
+
+        /// <summary>
+        /// Raises an event that informs the caller of a failed client authentication, by username and password, that has occured
+        /// </summary>
+        /// <param name="e"></param>
+        protected void OnLoginValidationFailed(LoginValidationFailedArgs e) { LoginValidationFailed?.Invoke(this, e); }
 
         #endregion
 
@@ -361,6 +394,36 @@ namespace RappelzClientUpdater {
 
                         break;
                 }
+            }
+        }
+
+        public void AuthenticateUser(string username, string password) {
+
+            // Invoke OnLoginValidation event
+            OnLoginValidation(new LoginValidationArgs(username, password));
+
+            BinaryReader br = new BinaryReader(Stream);
+            BinaryWriter bw = new BinaryWriter(Stream);
+
+            byte[] messageBytes = Encoding.ASCII.GetBytes($"client-login:{username}:{password}");
+            bw.Write(messageBytes.Length);
+            bw.Write(messageBytes);
+
+            int messageLength = br.ReadInt32();
+            byte[] responseBytes = br.ReadBytes(messageLength);
+            string response = Encoding.UTF8.GetString(responseBytes);
+
+            if (response.StartsWith("202 Accepted")) {
+
+                _ = int.TryParse(response.Split(':')[1], out int accountId);
+
+                // Invoke OnLoginValidationSuccess event
+                OnLoginValidationSuccess(new LoginValidationSuccessArgs(username, accountId));
+
+            } else {
+
+                // Invoke OnLoginValidationFailed event
+                OnLoginValidationFailed(new LoginValidationFailedArgs(username, password));
             }
         }
 
