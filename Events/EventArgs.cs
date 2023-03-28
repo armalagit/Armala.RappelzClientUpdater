@@ -1,14 +1,12 @@
 using RappelzClientUpdater.Enums;
 using System;
 
-namespace RappelzClientUpdater.Events
-{
+namespace RappelzClientUpdater.Events {
 
     /// <summary>
     /// Houses arguments passed to caller during raising of Authentication event
     /// </summary>
-    public class AuthenticationArgs : EventArgs
-    {
+    public class AuthenticationArgs : EventArgs {
         /// <summary>
         /// Constructor for the AuthenticationArgs, inheriting from Eventargs
         /// </summary>
@@ -18,8 +16,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of StatusUpdate event
     /// </summary>
-    public class StatusUpdateArgs : EventArgs
-    {
+    public class StatusUpdateArgs : EventArgs {
         /// <summary>
         /// string containing the message
         /// </summary>
@@ -44,8 +41,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of CurrentTransferProcess event
     /// </summary>
-    public class CurrentTransferProcessArgs : EventArgs
-    {
+    public class CurrentTransferProcessArgs : EventArgs {
         /// <summary>
         /// string containing the file name
         /// If file name returns empty the event indicates a generic information exchange
@@ -71,8 +67,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of MaxTransferProcess event
     /// </summary>
-    public class MaxTransferProcessArgs : EventArgs
-    {
+    public class MaxTransferProcessArgs : EventArgs {
         /// <summary>
         /// long containing the total transfer byte length
         /// </summary>
@@ -91,8 +86,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of GameClientVersion event
     /// </summary>
-    public class GameClientVersionArgs : EventArgs
-    {
+    public class GameClientVersionArgs : EventArgs {
         /// <summary>
         /// integer containing the previous version
         /// </summary>
@@ -114,8 +108,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of Connected event
     /// </summary>
-    public class ConnectedArgs : EventArgs
-    {
+    public class ConnectedArgs : EventArgs {
         /// <summary>
         /// Constructor for the ConnectedArgs, inheriting from Eventargs
         /// </summary>
@@ -125,8 +118,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of Disconnected event
     /// </summary>
-    public class DisconnectedArgs : EventArgs
-    {
+    public class DisconnectedArgs : EventArgs {
         /// <summary>
         /// Constructor for the DisconnectedArgs, inheriting from Eventargs
         /// </summary>
@@ -136,8 +128,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of LoginValidation event
     /// </summary>
-    public class LoginValidationArgs : EventArgs
-    {
+    public class LoginValidationArgs : EventArgs {
         /// <summary>
         /// string containing the username
         /// </summary>
@@ -159,8 +150,7 @@ namespace RappelzClientUpdater.Events
     /// <summary>
     /// Houses arguments passed to caller during raising of LoginValidation event
     /// </summary>
-    public class LoginValidationSuccessArgs : EventArgs
-    {
+    public class LoginValidationSuccessArgs : EventArgs {
         /// <summary>
         /// string containing the username
         /// </summary>
@@ -169,21 +159,25 @@ namespace RappelzClientUpdater.Events
         /// int containing the account id
         /// </summary>
         public int AccountId { get; set; }
+        /// <summary>
+        /// string containing the session token
+        /// </summary>
+        public string SessionToken { get; set; }
 
         /// <summary>
         /// Constructor for the LoginValidationArgs, inheriting from Eventargs
         /// </summary>
-        public LoginValidationSuccessArgs(string username, int accountId) {
+        public LoginValidationSuccessArgs(string username, int accountId, string sessionToken) {
             Username = username;
             AccountId = accountId;
+            SessionToken = sessionToken;
         }
     }
 
     /// <summary>
     /// Houses arguments passed to caller during raising of LoginValidation event
     /// </summary>
-    public class LoginValidationFailedArgs : EventArgs
-    {
+    public class LoginValidationFailedArgs : EventArgs {
         /// <summary>
         /// string containing the username
         /// </summary>
@@ -192,13 +186,18 @@ namespace RappelzClientUpdater.Events
         /// string containing the password
         /// </summary>
         public string Password { get; set; }
+        /// <summary>
+        /// string containing the server response message
+        /// </summary>
+        public string ResponseMessage { get; set; }
 
         /// <summary>
         /// Constructor for the LoginValidationArgs, inheriting from Eventargs
         /// </summary>
-        public LoginValidationFailedArgs(string username, string password) {
+        public LoginValidationFailedArgs(string username, string password, string responseMessage) {
             Username = username;
             Password = password;
+            ResponseMessage = responseMessage;
         }
     }
 

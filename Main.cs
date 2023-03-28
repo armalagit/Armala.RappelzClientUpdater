@@ -270,7 +270,7 @@ namespace RappelzClientUpdater {
 
                 // Write the new version to the version file
                 File.WriteAllBytes(versionPath, newVersion);
-                
+
                 // Invoke OnGameClientVersionUpdate
                 OnGameClientVersionUpdate(new GameClientVersionArgs(currentVersion, value));
             }
@@ -296,18 +296,21 @@ namespace RappelzClientUpdater {
         public ClientUpdater(
             IPAddress serverIp,
             short serverPort,
-            string clientPath,
+            string clientPath = "",
             string clientIdentifier = "",
             string operationalPath = "",
             string locale = "us"
         ) {
             ServerIp = serverIp;
             ServerPort = serverPort;
-            ClientPath = (string.IsNullOrEmpty(clientPath) ? throw new ArgumentNullException(nameof(clientPath)) : clientPath);
-            DataCore.Load(ClientPath);
             Fingerprint = (string.IsNullOrEmpty(clientIdentifier) ? "Armala.RappelzClientUpdater" : clientIdentifier);
             OperationalPath = (string.IsNullOrEmpty(operationalPath) ? Directory.GetCurrentDirectory() : operationalPath);
             Locale = (string.IsNullOrEmpty(locale) ? throw new ArgumentNullException(nameof(locale)) : locale);
+
+            if (!string.IsNullOrEmpty(clientPath)) {
+                ClientPath = clientPath;
+                DataCore.Load(ClientPath);
+            }
 
             DataCore.MessageOccured += (e, args) => { OnStatusUpdate(new StatusUpdateArgs(args.Message, MessageType.Information)); };
             DataCore.WarningOccured += (e, args) => { OnStatusUpdate(new StatusUpdateArgs(args.Warning, MessageType.Warning)); };
@@ -347,7 +350,7 @@ namespace RappelzClientUpdater {
             // Loop until loop break or method exit
             bool authenticated = false;
             while (!authenticated) {
-                
+
                 // Convert byte array to an integer value
                 int responseCode = br.ReadInt32();
                 switch (responseCode) {
@@ -365,7 +368,7 @@ namespace RappelzClientUpdater {
                         bw.Write(fingerprintBytes);
 
                         break;
-                        
+
                     // Authentication successful
                     case 202:
 
@@ -376,7 +379,7 @@ namespace RappelzClientUpdater {
                         authenticated = true;
 
                         break;
-                        
+
                     // Authentication failed or unexpected response
                     default:
 
@@ -397,6 +400,8 @@ namespace RappelzClientUpdater {
             }
         }
 
+
+        public void AuthenticateUser(string sessionToken) => AuthenticateUser(sessionToken, string.Empty);
         public void AuthenticateUser(string username, string password) {
 
             // Invoke OnLoginValidation event
@@ -405,7 +410,11 @@ namespace RappelzClientUpdater {
             BinaryReader br = new BinaryReader(Stream);
             BinaryWriter bw = new BinaryWriter(Stream);
 
-            byte[] messageBytes = Encoding.ASCII.GetBytes($"client-login:{username}:{password}");
+            byte[] messageBytes = Encoding.ASCII.GetBytes($"client-login:{username}:{password}:{Fingerprint}");
+
+            if (string.IsNullOrEmpty(password)) 
+                messageBytes = Encoding.ASCII.GetBytes($"session-login:{username}:NaN:{Fingerprint}");
+
             bw.Write(messageBytes.Length);
             bw.Write(messageBytes);
 
@@ -418,12 +427,12 @@ namespace RappelzClientUpdater {
                 _ = int.TryParse(response.Split(':')[1], out int accountId);
 
                 // Invoke OnLoginValidationSuccess event
-                OnLoginValidationSuccess(new LoginValidationSuccessArgs(username, accountId));
+                OnLoginValidationSuccess(new LoginValidationSuccessArgs(username, accountId, response.Split(':')[2]));
 
             } else {
 
                 // Invoke OnLoginValidationFailed event
-                OnLoginValidationFailed(new LoginValidationFailedArgs(username, password));
+                OnLoginValidationFailed(new LoginValidationFailedArgs(username, password, response));
             }
         }
 
@@ -443,7 +452,7 @@ namespace RappelzClientUpdater {
             byte[] messageBytes = Encoding.ASCII.GetBytes("update-seek");
             bw.Write(messageBytes.Length);
             bw.Write(messageBytes);
-            
+
             int messageLength = br.ReadInt32();
             byte[] responseBytes = br.ReadBytes(messageLength);
             string message = Encoding.UTF8.GetString(responseBytes);
